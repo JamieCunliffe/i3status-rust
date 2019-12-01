@@ -83,6 +83,12 @@ fn main() {
                 .help("exit on error rather than printing the error to i3bar and keep running")
                 .long("exit-on-error")
                 .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("ignore-errors")
+                .help("Ignore any blocks that have a config error")
+                .long("ignore-errors")
+                .takes_value(false),
         );
 
     if_debug!({
@@ -192,9 +198,11 @@ fn run(matches: &ArgMatches) -> Result<()> {
     let mut blocks: Vec<Box<dyn Block>> = Vec::new();
 
     let mut alternator = false;
+    let ignore_errors = matches.is_present("ignore-errors");
+
     // Initialize the blocks
     for &(ref block_name, ref block_config) in &config.blocks {
-        blocks.push(create_block(
+        let block = create_block(
             block_name,
             block_config.clone(),
             if alternator {
@@ -203,7 +211,17 @@ fn run(matches: &ArgMatches) -> Result<()> {
                 config.clone()
             },
             tx_update_requests.clone(),
-        )?);
+        );
+
+        match block {
+            Ok(_) => blocks.push(block?),
+            Err(e) => if ignore_errors {
+                continue;
+            } else {
+                return Err(e);
+            }
+        }
+
         alternator = !alternator;
     }
 
